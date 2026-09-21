@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rain Commute — Phase 1 Debug</title>
+  <meta
+    name="description"
+    content="Rain Commute Phase 1 single-location CWA rainfall validation page."
+  >
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="page-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Rain Commute · Phase 1</p>
+        <h1>單點降雨 Debug UI</h1>
+        <p class="lede">
+          輸入 WGS84 經緯度，查看 CWA 最新未來 1 小時雨量格點。
+          這是開發驗證頁，不是正式產品介面。
+        </p>
+      </div>
+      <div id="data-status" class="status-pill status-loading">載入資料中…</div>
+    </header>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>查詢位置</h2>
+          <p>可直接貼 Google Maps / GPS 常見的 WGS84 座標。</p>
+        </div>
+      </div>
+
+      <form id="query-form" class="query-form">
+        <label>
+          Latitude
+          <input
+            id="latitude"
+            name="latitude"
+            type="number"
+            step="0.000001"
+            inputmode="decimal"
+            required
+          >
+        </label>
+        <label>
+          Longitude
+          <input
+            id="longitude"
+            name="longitude"
+            type="number"
+            step="0.000001"
+            inputmode="decimal"
+            required
+          >
+        </label>
+        <button type="submit">查詢這個位置</button>
+      </form>
+
+      <div id="sample-area" class="sample-area" hidden>
+        <span class="sample-label">目前有效預報範例：</span>
+        <div id="sample-buttons" class="sample-buttons"></div>
+      </div>
+
+      <p id="form-error" class="error-text" role="alert" hidden></p>
+    </section>
+
+    <section class="result-grid" aria-live="polite">
+      <article class="result-card result-primary">
+        <span class="result-label">未來 1 小時預估雨量</span>
+        <strong id="rainfall-value" class="result-value">—</strong>
+        <span id="rainfall-status" class="result-note">等待查詢</span>
+      </article>
+
+      <article class="result-card">
+        <span class="result-label">CWA 資料時間</span>
+        <strong id="reference-time" class="result-text">—</strong>
+        <span id="snapshot-age" class="result-note">—</span>
+      </article>
+
+      <article class="result-card">
+        <span class="result-label">對應 TWD67 格點</span>
+        <strong id="grid-coordinate" class="result-text">—</strong>
+        <span id="grid-index" class="result-note">—</span>
+      </article>
+
+      <article class="result-card">
+        <span class="result-label">輸入 WGS84</span>
+        <strong id="input-coordinate" class="result-text">—</strong>
+        <span id="converted-coordinate" class="result-note">—</span>
+      </article>
+    </section>
+
+    <section class="panel debug-panel">
+      <details>
+        <summary>Debug 資訊</summary>
+        <dl class="debug-list">
+          <div>
+            <dt>Dataset</dt>
+            <dd id="debug-dataset">—</dd>
+          </div>
+          <div>
+            <dt>Grid</dt>
+            <dd id="debug-grid">—</dd>
+          </div>
+          <div>
+            <dt>Snapshot generated</dt>
+            <dd id="debug-generated">—</dd>
+          </div>
+          <div>
+            <dt>Browser coordinate approximation</dt>
+            <dd id="debug-transform">—</dd>
+          </div>
+          <div>
+            <dt>No-data handling</dt>
+            <dd>-99 只顯示為「無有效值」，不解讀成 0 mm。</dd>
+          </div>
+        </dl>
+      </details>
+    </section>
+
+    <footer>
+      <p id="attribution">資料來源：交通部中央氣象署</p>
+      <p>
+        此頁只做 Phase 1 資料鏈驗證。核心 Python 查詢仍使用 pyproj 的正式座標轉換。
+      </p>
+    </footer>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
