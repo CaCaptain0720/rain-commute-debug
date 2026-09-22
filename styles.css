@@ -362,3 +362,20 @@ footer p {
     grid-template-columns: 1fr;
   }
 }
+
+
+.route-exposure-summary {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, CanvasText 7%, transparent);
+  font-weight: 700;
+}
+
+.route-row-rain td {
+  background: color-mix(in srgb, CanvasText 5%, transparent);
+}
+
+.route-row-dry {
+  opacity: 0.72;
+}

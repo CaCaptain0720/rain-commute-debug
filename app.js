@@ -36,6 +36,7 @@ const elements = {
   routeError: document.querySelector("#route-error"),
   routeResult: document.querySelector("#route-result"),
   routeSummary: document.querySelector("#route-summary"),
+  routeExposureSummary: document.querySelector("#route-exposure-summary"),
   routeTableBody: document.querySelector("#route-table-body"),
 };
 
@@ -253,6 +254,7 @@ function runRouteQuery() {
 
   for (const row of rows) {
     const tr = document.createElement("tr");
+    tr.className = row.syntheticBucket.rainfallMm > 0 ? "route-row-rain" : "route-row-dry";
     const values = [
       String(row.index),
       `+${row.elapsedMinutes.toFixed(0)} 分 · ${formatTime(row.expectedPassTime)}`,
@@ -273,7 +275,47 @@ function runRouteQuery() {
 
   elements.routeSummary.textContent =
     `假設現在出發、總時間 ${durationMinutes.toFixed(0)} 分鐘；用 5 個等距點驗證「預計經過時間 → 10 分鐘時間桶」。`;
+  elements.routeExposureSummary.textContent = summarizeSyntheticExposure(rows);
   elements.routeResult.hidden = false;
+}
+
+function summarizeSyntheticExposure(rows) {
+  const runs = [];
+  let startIndex = null;
+
+  for (let index = 0; index <= rows.length; index += 1) {
+    const hasRain =
+      index < rows.length && rows[index].syntheticBucket.rainfallMm > 0;
+
+    if (hasRain && startIndex === null) {
+      startIndex = index;
+    } else if (!hasRain && startIndex !== null) {
+      const endIndex = index - 1;
+      const start = rows[startIndex];
+      const end = rows[endIndex];
+      runs.push({
+        startPoint: start.index,
+        endPoint: end.index,
+        startMinutes: start.elapsedMinutes,
+        endMinutes: end.elapsedMinutes,
+      });
+      startIndex = null;
+    }
+  }
+
+  if (runs.length === 0) {
+    return "假資料判斷：目前 5 個採樣點都沒有正雨量。";
+  }
+
+  const descriptions = runs.map((run) => {
+    const points =
+      run.startPoint === run.endPoint
+        ? `第 ${run.startPoint} 個採樣點`
+        : `第 ${run.startPoint}～${run.endPoint} 個採樣點`;
+    return `${points}（約 +${run.startMinutes.toFixed(0)}～+${run.endMinutes.toFixed(0)} 分）`;
+  });
+
+  return `假資料判斷：${descriptions.join("、")}的對應時間桶有雨量 > 0。`;
 }
 
 function syntheticTenMinuteBucket(elapsedMinutes) {
