@@ -2,6 +2,10 @@ const state = {
   snapshot: null,
 };
 
+const SYNTHETIC_TEN_MINUTE_RAIN_MM = [
+  0.0, 0.2, 1.0, 3.0, 6.0, 2.5, 0.5, 0.0, 1.8, 4.2, 0.7, 0.0,
+];
+
 const elements = {
   status: document.querySelector("#data-status"),
   form: document.querySelector("#query-form"),
@@ -229,11 +233,14 @@ function runRouteQuery() {
       );
       const lookup = lookupCoordinate(coordinate);
 
+      const syntheticBucket = syntheticTenMinuteBucket(elapsedMinutes);
+
       rows.push({
         index: index + 1,
         coordinate,
         elapsedMinutes,
         expectedPassTime,
+        syntheticBucket,
         rainfall: lookup.rainfall,
       });
     }
@@ -250,6 +257,8 @@ function runRouteQuery() {
       String(row.index),
       `+${row.elapsedMinutes.toFixed(0)} 分 · ${formatTime(row.expectedPassTime)}`,
       `${row.coordinate.latitude.toFixed(6)}, ${row.coordinate.longitude.toFixed(6)}`,
+      row.syntheticBucket.label,
+      `${row.syntheticBucket.rainfallMm.toFixed(1)} mm（假）`,
       formatRainfall(row.rainfall),
     ];
 
@@ -263,8 +272,24 @@ function runRouteQuery() {
   }
 
   elements.routeSummary.textContent =
-    `假設現在出發、總時間 ${durationMinutes.toFixed(0)} 分鐘；用 5 個等距點做開發測試。`;
+    `假設現在出發、總時間 ${durationMinutes.toFixed(0)} 分鐘；用 5 個等距點驗證「預計經過時間 → 10 分鐘時間桶」。`;
   elements.routeResult.hidden = false;
+}
+
+function syntheticTenMinuteBucket(elapsedMinutes) {
+  const bucketIndex = Math.floor(elapsedMinutes / 10);
+  const rainfallMm = SYNTHETIC_TEN_MINUTE_RAIN_MM[bucketIndex];
+
+  if (rainfallMm === undefined) {
+    throw new Error("假 10 分鐘資料只準備到 120 分鐘內，請縮短假設總時間。");
+  }
+
+  const startMinute = bucketIndex * 10;
+  const endMinute = startMinute + 10;
+  return {
+    rainfallMm,
+    label: `+${startMinute}–${endMinute} 分`,
+  };
 }
 
 function lookupCoordinate(coordinate) {

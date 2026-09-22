@@ -124,7 +124,7 @@
         </label>
         <label>
           假設總時間（分鐘）
-          <input id="route-duration" type="number" min="1" max="180" step="1" value="20" required>
+          <input id="route-duration" type="number" min="1" max="110" step="1" value="40" required>
         </label>
         <button type="submit">建立 5 點假路線</button>
       </form>
@@ -140,15 +140,17 @@
                 <th>點</th>
                 <th>預計經過</th>
                 <th>WGS84</th>
-                <th>未來 1 小時累積雨量</th>
+                <th>假 10 分鐘時段</th>
+                <th>假 10 分鐘雨量</th>
+                <th>目前 CWA 未來 1 小時累積雨量</th>
               </tr>
             </thead>
             <tbody id="route-table-body"></tbody>
           </table>
         </div>
         <p class="route-warning">
-          注意：目前 CWA 資料是一整張「未來 1 小時累積雨量」，不是每個經過時刻各自的雨量預報。
-          這裡先驗證位置串接，時間只是路線 metadata。
+          注意：「假 10 分鐘雨量」完全是 synthetic data，只用來驗證經過時間會選到正確的時間桶；
+          最右欄才是目前真的 CWA 未來 1 小時累積雨量。兩者不能混在一起解讀。
         </p>
       </div>
     </section>
