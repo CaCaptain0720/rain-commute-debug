@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Rain Commute — Phase 1 Debug</title>
+  <title>Rain Commute — Debug UI</title>
   <meta
     name="description"
-    content="Rain Commute Phase 1 single-location CWA rainfall validation page."
+    content="Rain Commute single-location and synthetic-route rainfall validation page."
   >
   <link rel="stylesheet" href="./styles.css">
 </head>
@@ -14,10 +14,10 @@
   <main class="page-shell">
     <header class="hero">
       <div>
-        <p class="eyebrow">Rain Commute · Phase 1</p>
-        <h1>單點降雨 Debug UI</h1>
+        <p class="eyebrow">Rain Commute · Debug</p>
+        <h1>Rain Commute Debug UI</h1>
         <p class="lede">
-          輸入 WGS84 經緯度，查看 CWA 最新未來 1 小時雨量格點。
+          Phase 1 可查單點雨量；Phase 2 加入假路線逐點查雨。
           這是開發驗證頁，不是正式產品介面。
         </p>
       </div>
@@ -92,6 +92,67 @@
       </article>
     </section>
 
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Phase 2 · Synthetic route</p>
+          <h2>假路線逐點查雨</h2>
+          <p>
+            用起點與終點產生一條直線假路線，先驗證「整條路線 → 多個位置 → 雨量」能不能串起來。
+            這不是實際道路，也不代表地圖導航結果。
+          </p>
+        </div>
+      </div>
+
+      <form id="route-form" class="route-form">
+        <label>
+          起點 Latitude
+          <input id="route-start-latitude" type="number" step="0.000001" inputmode="decimal" required>
+        </label>
+        <label>
+          起點 Longitude
+          <input id="route-start-longitude" type="number" step="0.000001" inputmode="decimal" required>
+        </label>
+        <label>
+          終點 Latitude
+          <input id="route-end-latitude" type="number" step="0.000001" inputmode="decimal" required>
+        </label>
+        <label>
+          終點 Longitude
+          <input id="route-end-longitude" type="number" step="0.000001" inputmode="decimal" required>
+        </label>
+        <label>
+          假設總時間（分鐘）
+          <input id="route-duration" type="number" min="1" max="180" step="1" value="20" required>
+        </label>
+        <button type="submit">建立 5 點假路線</button>
+      </form>
+
+      <p id="route-error" class="error-text" role="alert" hidden></p>
+
+      <div id="route-result" class="route-result" hidden>
+        <p id="route-summary" class="route-summary"></p>
+        <div class="table-wrap">
+          <table class="route-table">
+            <thead>
+              <tr>
+                <th>點</th>
+                <th>預計經過</th>
+                <th>WGS84</th>
+                <th>未來 1 小時累積雨量</th>
+              </tr>
+            </thead>
+            <tbody id="route-table-body"></tbody>
+          </table>
+        </div>
+        <p class="route-warning">
+          注意：目前 CWA 資料是一整張「未來 1 小時累積雨量」，不是每個經過時刻各自的雨量預報。
+          這裡先驗證位置串接，時間只是路線 metadata。
+        </p>
+      </div>
+    </section>
+
     <section class="panel debug-panel">
       <details>
         <summary>Debug 資訊</summary>
@@ -123,7 +184,7 @@
     <footer>
       <p id="attribution">資料來源：交通部中央氣象署</p>
       <p>
-        此頁只做 Phase 1 資料鏈驗證。核心 Python 查詢仍使用 pyproj 的正式座標轉換。
+        此頁用於 Phase 1 單點資料鏈與 Phase 2 假路線串接驗證。核心 Python 查詢仍使用 pyproj 的正式座標轉換。
       </p>
     </footer>
   </main>

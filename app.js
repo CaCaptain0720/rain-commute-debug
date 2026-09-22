@@ -23,11 +23,26 @@ const elements = {
   debugGenerated: document.querySelector("#debug-generated"),
   debugTransform: document.querySelector("#debug-transform"),
   attribution: document.querySelector("#attribution"),
+  routeForm: document.querySelector("#route-form"),
+  routeStartLatitude: document.querySelector("#route-start-latitude"),
+  routeStartLongitude: document.querySelector("#route-start-longitude"),
+  routeEndLatitude: document.querySelector("#route-end-latitude"),
+  routeEndLongitude: document.querySelector("#route-end-longitude"),
+  routeDuration: document.querySelector("#route-duration"),
+  routeError: document.querySelector("#route-error"),
+  routeResult: document.querySelector("#route-result"),
+  routeSummary: document.querySelector("#route-summary"),
+  routeTableBody: document.querySelector("#route-table-body"),
 };
 
 elements.form.addEventListener("submit", (event) => {
   event.preventDefault();
   runQuery();
+});
+
+elements.routeForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  runRouteQuery();
 });
 
 loadSnapshot();
@@ -96,15 +111,29 @@ function populateSamples() {
 }
 
 function populateInitialCoordinate() {
-  const firstSample = state.snapshot.samples?.[0];
+  const samples = state.snapshot.samples ?? [];
+  const firstSample = samples[0];
+  const secondSample = samples[1];
+
   if (firstSample) {
     elements.latitude.value = firstSample.wgs84.latitude.toFixed(6);
     elements.longitude.value = firstSample.wgs84.longitude.toFixed(6);
-    return;
+    elements.routeStartLatitude.value = firstSample.wgs84.latitude.toFixed(6);
+    elements.routeStartLongitude.value = firstSample.wgs84.longitude.toFixed(6);
+  } else {
+    elements.latitude.value = "25.033968";
+    elements.longitude.value = "121.564468";
+    elements.routeStartLatitude.value = "25.033968";
+    elements.routeStartLongitude.value = "121.564468";
   }
 
-  elements.latitude.value = "25.033968";
-  elements.longitude.value = "121.564468";
+  if (secondSample) {
+    elements.routeEndLatitude.value = secondSample.wgs84.latitude.toFixed(6);
+    elements.routeEndLongitude.value = secondSample.wgs84.longitude.toFixed(6);
+  } else {
+    elements.routeEndLatitude.value = "25.047924";
+    elements.routeEndLongitude.value = "121.517081";
+  }
 }
 
 function runQuery() {
@@ -122,46 +151,175 @@ function runQuery() {
     return;
   }
 
-  const input = { latitude, longitude };
-  const bounds = state.snapshot.wgs84_supported_bounds;
+  try {
+    const result = lookupCoordinate({ latitude, longitude });
 
-  if (!contains(bounds, input)) {
-    showError(
-      `目前 Phase 1 座標轉換只驗證台灣本島範圍：lat ${bounds.south}–${bounds.north}, lon ${bounds.west}–${bounds.east}。`,
-    );
+    elements.inputCoordinate.textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+    elements.convertedCoordinate.textContent =
+      `瀏覽器近似 TWD67：${result.twd67.latitude.toFixed(6)}, ${result.twd67.longitude.toFixed(6)}`;
+    elements.gridCoordinate.textContent =
+      `${result.gridLatitude.toFixed(6)}, ${result.gridLongitude.toFixed(6)}`;
+    elements.gridIndex.textContent =
+      `x=${result.x}, y=${result.y}, index=${result.index}`;
+
+    if (result.rainfall === state.snapshot.no_data_value) {
+      elements.rainfallValue.textContent = "無有效值";
+      elements.rainfallStatus.textContent = "-99：只代表 no-data，不代表 0 mm 或不下雨。";
+    } else {
+      elements.rainfallValue.textContent = `${Number(result.rainfall).toFixed(1)} mm`;
+      elements.rainfallStatus.textContent = "CWA 未來 1 小時雷達定量降雨預報";
+    }
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
+function runRouteQuery() {
+  if (!state.snapshot) {
     return;
   }
 
-  const twd67 = applyBrowserTransform(input, state.snapshot.browser_transform);
+  elements.routeError.hidden = true;
+  elements.routeError.textContent = "";
+  elements.routeResult.hidden = true;
+
+  const startCoordinate = {
+    latitude: Number(elements.routeStartLatitude.value),
+    longitude: Number(elements.routeStartLongitude.value),
+  };
+  const endCoordinate = {
+    latitude: Number(elements.routeEndLatitude.value),
+    longitude: Number(elements.routeEndLongitude.value),
+  };
+  const durationMinutes = Number(elements.routeDuration.value);
+
+  if (
+    !Number.isFinite(startCoordinate.latitude)
+    || !Number.isFinite(startCoordinate.longitude)
+    || !Number.isFinite(endCoordinate.latitude)
+    || !Number.isFinite(endCoordinate.longitude)
+  ) {
+    showRouteError("請輸入有效的起點與終點座標。");
+    return;
+  }
+
+  if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+    showRouteError("假設總時間必須大於 0 分鐘。");
+    return;
+  }
+
+  const pointCount = 5;
+  const departureTime = new Date();
+  const rows = [];
+
+  try {
+    for (let index = 0; index < pointCount; index += 1) {
+      const ratio = index / (pointCount - 1);
+      const coordinate = {
+        latitude:
+          startCoordinate.latitude
+          + (endCoordinate.latitude - startCoordinate.latitude) * ratio,
+        longitude:
+          startCoordinate.longitude
+          + (endCoordinate.longitude - startCoordinate.longitude) * ratio,
+      };
+      const elapsedMinutes = durationMinutes * ratio;
+      const expectedPassTime = new Date(
+        departureTime.getTime() + elapsedMinutes * 60 * 1000,
+      );
+      const lookup = lookupCoordinate(coordinate);
+
+      rows.push({
+        index: index + 1,
+        coordinate,
+        elapsedMinutes,
+        expectedPassTime,
+        rainfall: lookup.rainfall,
+      });
+    }
+  } catch (error) {
+    showRouteError(error.message);
+    return;
+  }
+
+  elements.routeTableBody.replaceChildren();
+
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    const values = [
+      String(row.index),
+      `+${row.elapsedMinutes.toFixed(0)} 分 · ${formatTime(row.expectedPassTime)}`,
+      `${row.coordinate.latitude.toFixed(6)}, ${row.coordinate.longitude.toFixed(6)}`,
+      formatRainfall(row.rainfall),
+    ];
+
+    for (const value of values) {
+      const td = document.createElement("td");
+      td.textContent = value;
+      tr.append(td);
+    }
+
+    elements.routeTableBody.append(tr);
+  }
+
+  elements.routeSummary.textContent =
+    `假設現在出發、總時間 ${durationMinutes.toFixed(0)} 分鐘；用 5 個等距點做開發測試。`;
+  elements.routeResult.hidden = false;
+}
+
+function lookupCoordinate(coordinate) {
+  const bounds = state.snapshot.wgs84_supported_bounds;
+
+  if (!contains(bounds, coordinate)) {
+    throw new Error(
+      `目前座標轉換只驗證台灣本島範圍：lat ${bounds.south}–${bounds.north}, lon ${bounds.west}–${bounds.east}。`,
+    );
+  }
+
+  const twd67 = applyBrowserTransform(coordinate, state.snapshot.browser_transform);
   const grid = state.snapshot.grid;
-  const x = Math.floor((twd67.longitude - grid.start_twd67.longitude) / grid.resolution_degrees + 0.5);
-  const y = Math.floor((twd67.latitude - grid.start_twd67.latitude) / grid.resolution_degrees + 0.5);
+  const x = Math.floor(
+    (twd67.longitude - grid.start_twd67.longitude) / grid.resolution_degrees + 0.5,
+  );
+  const y = Math.floor(
+    (twd67.latitude - grid.start_twd67.latitude) / grid.resolution_degrees + 0.5,
+  );
 
   if (x < 0 || x >= grid.width || y < 0 || y >= grid.height) {
-    showError("轉換後位置落在目前 QPESUMS 格點範圍外。");
-    return;
+    throw new Error("轉換後位置落在目前 QPESUMS 格點範圍外。");
   }
 
   const index = y * grid.width + x;
-  const rainfall = grid.values_mm[index];
-  const gridLatitude = grid.start_twd67.latitude + y * grid.resolution_degrees;
-  const gridLongitude = grid.start_twd67.longitude + x * grid.resolution_degrees;
+  return {
+    twd67,
+    x,
+    y,
+    index,
+    rainfall: grid.values_mm[index],
+    gridLatitude: grid.start_twd67.latitude + y * grid.resolution_degrees,
+    gridLongitude: grid.start_twd67.longitude + x * grid.resolution_degrees,
+  };
+}
 
-  elements.inputCoordinate.textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-  elements.convertedCoordinate.textContent =
-    `瀏覽器近似 TWD67：${twd67.latitude.toFixed(6)}, ${twd67.longitude.toFixed(6)}`;
-  elements.gridCoordinate.textContent =
-    `${gridLatitude.toFixed(6)}, ${gridLongitude.toFixed(6)}`;
-  elements.gridIndex.textContent = `x=${x}, y=${y}, index=${index}`;
-
-  if (rainfall === state.snapshot.no_data_value) {
-    elements.rainfallValue.textContent = "無有效值";
-    elements.rainfallStatus.textContent = "-99：只代表 no-data，不代表 0 mm 或不下雨。";
-  } else {
-    elements.rainfallValue.textContent = `${Number(rainfall).toFixed(1)} mm`;
-    elements.rainfallStatus.textContent = "CWA 未來 1 小時雷達定量降雨預報";
+function formatRainfall(value) {
+  if (value === state.snapshot.no_data_value) {
+    return "無有效值";
   }
+  return `${Number(value).toFixed(1)} mm`;
+}
 
+function formatTime(date) {
+  return new Intl.DateTimeFormat("zh-TW", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Taipei",
+  }).format(date);
+}
+
+function showRouteError(message) {
+  elements.routeError.hidden = false;
+  elements.routeError.textContent = message;
 }
 
 function applyBrowserTransform(coordinate, transform) {
