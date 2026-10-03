@@ -17,8 +17,8 @@
         <p class="eyebrow">Rain Commute · Debug</p>
         <h1>Rain Commute Debug UI</h1>
         <p class="lede">
-          Phase 1 可查單點雨量；Phase 2 加入假路線逐點查雨。
-          這是開發驗證頁，不是正式產品介面。
+          Phase 1 可查單點 CWA 雨量；Phase 3 加入真實 ExAMP 10 分鐘時段預報。
+          路線仍是直線假路線，這是開發驗證頁，不是正式產品介面。
         </p>
       </div>
       <div id="data-status" class="status-pill status-loading">載入資料中…</div>
@@ -56,7 +56,13 @@
           >
         </label>
         <button type="submit">查詢這個位置</button>
+        <button id="current-location-button" class="button-secondary" type="button">
+          使用目前位置
+        </button>
       </form>
+      <p class="privacy-note">
+        「使用目前位置」只在你的瀏覽器裡填入座標並查這份公開快照，不會把你的位置送給 NCDR 或存進本站。
+      </p>
 
       <div id="sample-area" class="sample-area" hidden>
         <span class="sample-label">目前有效預報範例：</span>
@@ -68,9 +74,21 @@
 
     <section class="result-grid" aria-live="polite">
       <article class="result-card result-primary">
-        <span class="result-label">未來 1 小時預估雨量</span>
+        <span class="result-label">ExAMP · 對應現在時刻的 10 分鐘預報</span>
+        <strong id="examp-rainfall-value" class="result-value">—</strong>
+        <span id="examp-rainfall-status" class="result-note">等待查詢</span>
+      </article>
+
+      <article class="result-card result-primary">
+        <span class="result-label">CWA · 未來 1 小時累積預估雨量</span>
         <strong id="rainfall-value" class="result-value">—</strong>
         <span id="rainfall-status" class="result-note">等待查詢</span>
+      </article>
+
+      <article class="result-card">
+        <span class="result-label">ExAMP 資料時間</span>
+        <strong id="examp-reference-time" class="result-text">—</strong>
+        <span id="examp-grid-summary" class="result-note">—</span>
       </article>
 
       <article class="result-card">
@@ -96,11 +114,11 @@
     <section class="panel">
       <div class="panel-heading">
         <div>
-          <p class="eyebrow">Phase 2 · Synthetic route</p>
-          <h2>假路線逐點查雨</h2>
+          <p class="eyebrow">Phase 3 · Synthetic route + live ExAMP</p>
+          <h2>假路線 × 真實時間預報</h2>
           <p>
-            用起點與終點產生一條直線假路線，先驗證「整條路線 → 多個位置 → 雨量」能不能串起來。
-            這不是實際道路，也不代表地圖導航結果。
+            路線仍用起點與終點產生 5 個直線測試點；每個點的預計經過時間會真的對到
+            ExAMP 的 f10min～f120min 預報。這不是實際道路，也不代表地圖導航結果。
           </p>
         </div>
       </div>
@@ -141,18 +159,18 @@
                 <th>點</th>
                 <th>預計經過</th>
                 <th>WGS84</th>
-                <th>假 10 分鐘時段</th>
-                <th>假 10 分鐘雨量</th>
-                <th>目前 CWA 未來 1 小時累積雨量</th>
+                <th>ExAMP 對應時段</th>
+                <th>ExAMP 雨量</th>
+                <th>CWA 未來 1 小時累積雨量</th>
               </tr>
             </thead>
             <tbody id="route-table-body"></tbody>
           </table>
         </div>
         <p class="route-warning">
-          注意：「假 10 分鐘雨量」完全是 synthetic data，只用來驗證經過時間會選到正確的時間桶；
-          上面的「有雨區間」也只描述採樣點，不代表精確的道路起訖位置。
-          最右欄才是目前真的 CWA 未來 1 小時累積雨量。兩者不能混在一起解讀。
+          注意：路線幾何仍是 synthetic 直線，只用來驗證「位置 + 預計經過時間 + 真實 ExAMP 雨量」。
+          ExAMP 欄位是真實資料，但目前仍在驗證 NCDR lon/lat 與 WGS84 直接對齊的空間假設；
+          上面的有雨區間也只描述 5 個採樣點，不代表精確道路邊界。
         </p>
       </div>
     </section>
@@ -178,6 +196,14 @@
             <dd id="debug-transform">—</dd>
           </div>
           <div>
+            <dt>ExAMP dataset</dt>
+            <dd id="debug-examp-dataset">—</dd>
+          </div>
+          <div>
+            <dt>ExAMP public slice</dt>
+            <dd id="debug-examp-grid">—</dd>
+          </div>
+          <div>
             <dt>No-data handling</dt>
             <dd>-99 只顯示為「無有效值」，不解讀成 0 mm。</dd>
           </div>
@@ -188,7 +214,8 @@
     <footer>
       <p id="attribution">資料來源：交通部中央氣象署</p>
       <p>
-        此頁用於 Phase 1 單點資料鏈與 Phase 2 假路線串接驗證。核心 Python 查詢仍使用 pyproj 的正式座標轉換。
+        此頁用於 CWA 單點資料鏈與 Phase 3 ExAMP 時間對齊驗證。NCDR Token 只存在私有 GitHub Actions；
+        公開頁面只拿到裁切後的安全雨量快照。
       </p>
     </footer>
   </main>

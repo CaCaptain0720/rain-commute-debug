@@ -2,16 +2,17 @@ const state = {
   snapshot: null,
 };
 
-const SYNTHETIC_TEN_MINUTE_RAIN_MM = [
-  0.0, 0.2, 1.0, 3.0, 6.0, 2.5, 0.5, 0.0, 1.8, 4.2, 0.7, 0.0,
-];
-
 const elements = {
   status: document.querySelector("#data-status"),
   form: document.querySelector("#query-form"),
   latitude: document.querySelector("#latitude"),
   longitude: document.querySelector("#longitude"),
+  currentLocationButton: document.querySelector("#current-location-button"),
   error: document.querySelector("#form-error"),
+  exampRainfallValue: document.querySelector("#examp-rainfall-value"),
+  exampRainfallStatus: document.querySelector("#examp-rainfall-status"),
+  exampReferenceTime: document.querySelector("#examp-reference-time"),
+  exampGridSummary: document.querySelector("#examp-grid-summary"),
   sampleArea: document.querySelector("#sample-area"),
   sampleButtons: document.querySelector("#sample-buttons"),
   rainfallValue: document.querySelector("#rainfall-value"),
@@ -26,6 +27,8 @@ const elements = {
   debugGrid: document.querySelector("#debug-grid"),
   debugGenerated: document.querySelector("#debug-generated"),
   debugTransform: document.querySelector("#debug-transform"),
+  debugExampDataset: document.querySelector("#debug-examp-dataset"),
+  debugExampGrid: document.querySelector("#debug-examp-grid"),
   attribution: document.querySelector("#attribution"),
   routeForm: document.querySelector("#route-form"),
   routeStartLatitude: document.querySelector("#route-start-latitude"),
@@ -50,6 +53,8 @@ elements.routeForm.addEventListener("submit", (event) => {
   runRouteQuery();
 });
 
+elements.currentLocationButton.addEventListener("click", useCurrentLocation);
+
 loadSnapshot();
 
 async function loadSnapshot() {
@@ -64,7 +69,10 @@ async function loadSnapshot() {
     }
 
     state.snapshot = await response.json();
-    setStatus("ready", "最新資料已載入");
+    if (!state.snapshot.examp) {
+      throw new Error("ExAMP snapshot is missing");
+    }
+    setStatus("ready", "CWA + ExAMP 最新資料已載入");
     populateMetadata();
     populateSamples();
     populateInitialCoordinate();
@@ -82,13 +90,22 @@ function populateMetadata() {
 
   elements.referenceTime.textContent = formatDateTime(snapshot.reference_time);
   elements.snapshotAge.textContent = `頁面資料產生：${formatDateTime(snapshot.generated_at)}`;
+  elements.exampReferenceTime.textContent = formatDateTime(snapshot.examp.reference_time);
+  elements.exampGridSummary.textContent =
+    `${snapshot.examp.grid.width} × ${snapshot.examp.grid.height}, `
+    + `${snapshot.examp.grid.resolution_degrees}°, ${snapshot.examp.unit}`;
   elements.debugDataset.textContent = snapshot.dataset_id;
   elements.debugGrid.textContent =
     `${grid.width} × ${grid.height}, ${grid.resolution_degrees}°, ${snapshot.unit}`;
   elements.debugGenerated.textContent = formatDateTime(snapshot.generated_at);
   elements.debugTransform.textContent =
     `靜態頁近似轉換；驗證最大誤差 ${snapshot.browser_transform.max_validation_error_m.toFixed(3)} m。核心 Python 仍使用 pyproj。`;
-  elements.attribution.textContent = snapshot.attribution;
+  elements.debugExampDataset.textContent = snapshot.examp.dataset_id;
+  elements.debugExampGrid.textContent =
+    `${snapshot.examp.grid.width} × ${snapshot.examp.grid.height}, `
+    + `${snapshot.examp.grid.resolution_degrees}°；公開頁只含台灣本島驗證範圍。`;
+  elements.attribution.textContent =
+    `${snapshot.attribution}；ExAMP 資料來源：國家災害防救科技中心（NCDR）`;
 }
 
 function populateSamples() {
@@ -157,7 +174,13 @@ function runQuery() {
   }
 
   try {
-    const result = lookupCoordinate({ latitude, longitude });
+    const coordinate = { latitude, longitude };
+    const result = lookupCoordinate(coordinate);
+    const exampResult = lookupExampCoordinate(coordinate, new Date());
+
+    elements.exampRainfallValue.textContent = formatExampRainfall(exampResult.rainfall);
+    elements.exampRainfallStatus.textContent =
+      `${exampResult.field}（資料起始 +${exampResult.startMinute}–+${exampResult.endMinute} 分）`;
 
     elements.inputCoordinate.textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
     elements.convertedCoordinate.textContent =
@@ -234,14 +257,14 @@ function runRouteQuery() {
       );
       const lookup = lookupCoordinate(coordinate);
 
-      const syntheticBucket = syntheticTenMinuteBucket(elapsedMinutes);
+      const exampLookup = lookupExampCoordinate(coordinate, expectedPassTime);
 
       rows.push({
         index: index + 1,
         coordinate,
         elapsedMinutes,
         expectedPassTime,
-        syntheticBucket,
+        exampLookup,
         rainfall: lookup.rainfall,
       });
     }
@@ -254,13 +277,16 @@ function runRouteQuery() {
 
   for (const row of rows) {
     const tr = document.createElement("tr");
-    tr.className = row.syntheticBucket.rainfallMm > 0 ? "route-row-rain" : "route-row-dry";
+    tr.className =
+      row.exampLookup.rainfall !== null && row.exampLookup.rainfall > 0
+        ? "route-row-rain"
+        : "route-row-dry";
     const values = [
       String(row.index),
       `+${row.elapsedMinutes.toFixed(0)} 分 · ${formatTime(row.expectedPassTime)}`,
       `${row.coordinate.latitude.toFixed(6)}, ${row.coordinate.longitude.toFixed(6)}`,
-      row.syntheticBucket.label,
-      `${row.syntheticBucket.rainfallMm.toFixed(1)} mm（假）`,
+      `${row.exampLookup.field} · +${row.exampLookup.startMinute}–+${row.exampLookup.endMinute} 分`,
+      formatExampRainfall(row.exampLookup.rainfall),
       formatRainfall(row.rainfall),
     ];
 
@@ -274,63 +300,141 @@ function runRouteQuery() {
   }
 
   elements.routeSummary.textContent =
-    `假設現在出發、總時間 ${durationMinutes.toFixed(0)} 分鐘；用 5 個等距點驗證「預計經過時間 → 10 分鐘時間桶」。`;
-  elements.routeExposureSummary.textContent = summarizeSyntheticExposure(rows);
+    `假設現在出發、總時間 ${durationMinutes.toFixed(0)} 分鐘；用 5 個等距點驗證「位置 + 預計經過時間 → 真實 ExAMP 時段雨量」。`;
+  elements.routeExposureSummary.textContent = summarizeExampExposure(rows);
   elements.routeResult.hidden = false;
 }
 
-function summarizeSyntheticExposure(rows) {
-  const runs = [];
-  let startIndex = null;
+function summarizeExampExposure(rows) {
+  const rainyRows = rows.filter(
+    (row) => row.exampLookup.rainfall !== null && row.exampLookup.rainfall > 0,
+  );
+  const unknownRows = rows.filter((row) => row.exampLookup.rainfall === null);
 
-  for (let index = 0; index <= rows.length; index += 1) {
-    const hasRain =
-      index < rows.length && rows[index].syntheticBucket.rainfallMm > 0;
-
-    if (hasRain && startIndex === null) {
-      startIndex = index;
-    } else if (!hasRain && startIndex !== null) {
-      const endIndex = index - 1;
-      const start = rows[startIndex];
-      const end = rows[endIndex];
-      runs.push({
-        startPoint: start.index,
-        endPoint: end.index,
-        startMinutes: start.elapsedMinutes,
-        endMinutes: end.elapsedMinutes,
-      });
-      startIndex = null;
-    }
+  if (rainyRows.length === 0 && unknownRows.length === 0) {
+    return "ExAMP 判斷：目前 5 個採樣點的對應時段都是 0 mm。";
   }
 
-  if (runs.length === 0) {
-    return "假資料判斷：目前 5 個採樣點都沒有正雨量。";
+  const parts = [];
+  if (rainyRows.length > 0) {
+    parts.push(
+      `有雨量 > 0：第 ${rainyRows.map((row) => row.index).join("、")} 點`,
+    );
   }
-
-  const descriptions = runs.map((run) => {
-    const points =
-      run.startPoint === run.endPoint
-        ? `第 ${run.startPoint} 個採樣點`
-        : `第 ${run.startPoint}～${run.endPoint} 個採樣點`;
-    return `${points}（約 +${run.startMinutes.toFixed(0)}～+${run.endMinutes.toFixed(0)} 分）`;
-  });
-
-  return `假資料判斷：${descriptions.join("、")}的對應時間桶有雨量 > 0。`;
+  if (unknownRows.length > 0) {
+    parts.push(
+      `無有效值：第 ${unknownRows.map((row) => row.index).join("、")} 點`,
+    );
+  }
+  return `ExAMP 判斷：${parts.join("；")}。只描述這 5 個採樣點。`;
 }
 
-function syntheticTenMinuteBucket(elapsedMinutes) {
-  const bucketIndex = Math.floor(elapsedMinutes / 10);
-  const rainfallMm = SYNTHETIC_TEN_MINUTE_RAIN_MM[bucketIndex];
+function useCurrentLocation() {
+  hideError();
 
-  if (rainfallMm === undefined) {
-    throw new Error("假 10 分鐘資料只準備到 120 分鐘內，請縮短假設總時間。");
+  if (!navigator.geolocation) {
+    showError("這個瀏覽器不支援定位功能。");
+    return;
   }
 
-  const startMinute = bucketIndex * 10;
-  const endMinute = startMinute + 10;
+  elements.currentLocationButton.disabled = true;
+  elements.currentLocationButton.textContent = "取得位置中…";
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const latitude = position.coords.latitude;
+      const longitude = position.coords.longitude;
+
+      elements.latitude.value = latitude.toFixed(6);
+      elements.longitude.value = longitude.toFixed(6);
+      elements.routeStartLatitude.value = latitude.toFixed(6);
+      elements.routeStartLongitude.value = longitude.toFixed(6);
+
+      elements.currentLocationButton.disabled = false;
+      elements.currentLocationButton.textContent = "使用目前位置";
+      runQuery();
+    },
+    (error) => {
+      console.error(error);
+      elements.currentLocationButton.disabled = false;
+      elements.currentLocationButton.textContent = "使用目前位置";
+      showError("無法取得目前位置；請確認瀏覽器定位權限，或手動輸入座標。");
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 60000,
+    },
+  );
+}
+
+function lookupExampCoordinate(coordinate, validAt) {
+  const bounds = state.snapshot.wgs84_supported_bounds;
+  if (!contains(bounds, coordinate)) {
+    throw new Error(
+      `ExAMP 公開驗證範圍目前只涵蓋台灣本島：lat ${bounds.south}–${bounds.north}, lon ${bounds.west}–${bounds.east}。`,
+    );
+  }
+
+  const examp = state.snapshot.examp;
+  const grid = examp.grid;
+  const x = Math.floor(
+    (coordinate.longitude - grid.start_wgs84_assumed.longitude)
+      / grid.resolution_degrees
+      + 0.5
+      + 1e-9,
+  );
+  const y = Math.floor(
+    (coordinate.latitude - grid.start_wgs84_assumed.latitude)
+      / grid.resolution_degrees
+      + 0.5
+      + 1e-9,
+  );
+
+  if (x < 0 || x >= grid.width || y < 0 || y >= grid.height) {
+    throw new Error("位置落在目前公開的 ExAMP 驗證格網範圍外。");
+  }
+
+  const bucket = exampBucketForValidTime(validAt);
+  const values = grid.values_mm_by_field[bucket.field];
+  const index = y * grid.width + x;
+
   return {
-    rainfallMm,
-    label: `+${startMinute}–${endMinute} 分`,
+    ...bucket,
+    rainfall: values[index],
+    x,
+    y,
+    index,
+    gridLatitude: grid.start_wgs84_assumed.latitude + y * grid.resolution_degrees,
+    gridLongitude: grid.start_wgs84_assumed.longitude + x * grid.resolution_degrees,
+  };
+}
+
+function exampBucketForValidTime(validAt) {
+  const examp = state.snapshot.examp;
+  const referenceTime = new Date(examp.reference_time);
+  const elapsedMinutes = (validAt.getTime() - referenceTime.getTime()) / 60000;
+
+  if (!Number.isFinite(elapsedMinutes)) {
+    throw new Error("ExAMP 資料時間格式無法解析。");
+  }
+  if (elapsedMinutes < 0) {
+    throw new Error("目前查詢時間早於 ExAMP 資料起始時間。");
+  }
+  if (elapsedMinutes >= 120) {
+    throw new Error("ExAMP 快照已超過 120 分鐘預報範圍，請等待資料更新。");
+  }
+
+  const bucketIndex = Math.floor(elapsedMinutes / 10);
+  const field = examp.forecast_fields[bucketIndex];
+  if (!field) {
+    throw new Error("找不到對應的 ExAMP 10 分鐘欄位。");
+  }
+
+  return {
+    field,
+    startMinute: bucketIndex * 10,
+    endMinute: bucketIndex * 10 + 10,
   };
 }
 
@@ -373,6 +477,13 @@ function formatRainfall(value) {
     return "無有效值";
   }
   return `${Number(value).toFixed(1)} mm`;
+}
+
+function formatExampRainfall(value) {
+  if (value === null || value === undefined) {
+    return "無有效值";
+  }
+  return `${Number(value).toFixed(2)} mm`;
 }
 
 function formatTime(date) {

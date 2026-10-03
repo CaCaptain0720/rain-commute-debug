@@ -92,7 +92,7 @@ h2 {
 
 .query-form {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: 1fr 1fr auto auto;
   gap: 12px;
   align-items: end;
 }
@@ -125,6 +125,18 @@ h2 {
   padding: 10px 16px;
   background: CanvasText;
   color: Canvas;
+}
+
+.query-form .button-secondary {
+  border: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+  background: Canvas;
+  color: CanvasText;
+}
+
+.privacy-note {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  opacity: 0.68;
 }
 
 .sample-area {
