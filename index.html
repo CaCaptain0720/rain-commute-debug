@@ -55,7 +55,7 @@
             required
           >
         </label>
-        <button type="submit">查詢這個位置</button>
+        <button type="submit">查詢輸入座標</button>
         <button id="current-location-button" class="button-secondary" type="button">
           使用目前位置
         </button>
@@ -70,6 +70,62 @@
       </div>
 
       <p id="form-error" class="error-text" role="alert" hidden></p>
+    </section>
+
+    <section class="panel validation-guide" aria-live="polite">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">定點實測 SOP</p>
+          <h2>每次測試固定做這 3 步</h2>
+          <p>不用再判斷要按 F5 還是哪個按鈕；照順序做就可以。</p>
+        </div>
+      </div>
+
+      <ol class="test-steps">
+        <li>
+          <div>
+            <strong>1. 重新載入網站資料</strong>
+            <span>按「重新載入資料」，等右上角顯示 CWA + ExAMP 資料已載入。</span>
+          </div>
+          <button id="reload-data-button" type="button">重新載入資料</button>
+        </li>
+        <li>
+          <div>
+            <strong>2. 更新你的位置</strong>
+            <span>資料載入後，按上面的「使用目前位置」。</span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong>3. 照時間看現場</strong>
+            <span id="validation-instruction">完成第 2 步後，這裡會直接告訴你幾點到幾點要觀察。</span>
+          </div>
+        </li>
+      </ol>
+
+      <div class="validation-live">
+        <div>
+          <span class="validation-label">資料狀態</span>
+          <strong id="validation-data-status">等待載入</strong>
+        </div>
+        <div>
+          <span class="validation-label">查詢來源</span>
+          <strong id="validation-query-source">尚未使用目前位置</strong>
+        </div>
+        <div>
+          <span class="validation-label">這一筆驗證時間</span>
+          <strong id="validation-window">—</strong>
+        </div>
+        <div>
+          <span class="validation-label">ExAMP 預報</span>
+          <strong id="validation-rainfall">—</strong>
+        </div>
+      </div>
+
+      <p class="validation-note">
+        定點實測不用按「查詢輸入座標」；那顆只在你手動修改 Latitude / Longitude 時使用。
+        只有地面濕、但看不到雨正在落下時，先記成「不確定」，不要直接算有雨。
+      </p>
     </section>
 
     <section class="result-grid" aria-live="polite">

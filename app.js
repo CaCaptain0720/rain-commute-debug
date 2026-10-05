@@ -8,6 +8,12 @@ const elements = {
   latitude: document.querySelector("#latitude"),
   longitude: document.querySelector("#longitude"),
   currentLocationButton: document.querySelector("#current-location-button"),
+  reloadDataButton: document.querySelector("#reload-data-button"),
+  validationInstruction: document.querySelector("#validation-instruction"),
+  validationDataStatus: document.querySelector("#validation-data-status"),
+  validationQuerySource: document.querySelector("#validation-query-source"),
+  validationWindow: document.querySelector("#validation-window"),
+  validationRainfall: document.querySelector("#validation-rainfall"),
   error: document.querySelector("#form-error"),
   exampRainfallValue: document.querySelector("#examp-rainfall-value"),
   exampRainfallStatus: document.querySelector("#examp-rainfall-status"),
@@ -45,7 +51,7 @@ const elements = {
 
 elements.form.addEventListener("submit", (event) => {
   event.preventDefault();
-  runQuery();
+  runQuery("manual");
 });
 
 elements.routeForm.addEventListener("submit", (event) => {
@@ -54,6 +60,9 @@ elements.routeForm.addEventListener("submit", (event) => {
 });
 
 elements.currentLocationButton.addEventListener("click", useCurrentLocation);
+elements.reloadDataButton.addEventListener("click", () => {
+  window.location.reload();
+});
 
 loadSnapshot();
 
@@ -72,11 +81,12 @@ async function loadSnapshot() {
     if (!state.snapshot.examp) {
       throw new Error("ExAMP snapshot is missing");
     }
-    setStatus("ready", "CWA + ExAMP 最新資料已載入");
+    setStatus("ready", "CWA + ExAMP 資料已載入");
     populateMetadata();
+    updateSnapshotFreshnessGuide();
     populateSamples();
     populateInitialCoordinate();
-    runQuery();
+    runQuery("initial");
   } catch (error) {
     console.error(error);
     setStatus("error", "資料載入失敗");
@@ -124,7 +134,7 @@ function populateSamples() {
     button.addEventListener("click", () => {
       elements.latitude.value = sample.wgs84.latitude.toFixed(6);
       elements.longitude.value = sample.wgs84.longitude.toFixed(6);
-      runQuery();
+      runQuery("sample");
     });
     elements.sampleButtons.append(button);
   }
@@ -158,7 +168,7 @@ function populateInitialCoordinate() {
   }
 }
 
-function runQuery() {
+function runQuery(source = "manual") {
   if (!state.snapshot) {
     return;
   }
@@ -181,6 +191,7 @@ function runQuery() {
     elements.exampRainfallValue.textContent = formatExampRainfall(exampResult.rainfall);
     elements.exampRainfallStatus.textContent =
       `${exampResult.field}（資料起始 +${exampResult.startMinute}–+${exampResult.endMinute} 分）`;
+    updateValidationQueryGuide(exampResult, source);
 
     elements.inputCoordinate.textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
     elements.convertedCoordinate.textContent =
@@ -198,6 +209,7 @@ function runQuery() {
       elements.rainfallStatus.textContent = "CWA 未來 1 小時雷達定量降雨預報";
     }
   } catch (error) {
+    updateValidationErrorGuide(error.message, source);
     showError(error.message);
   }
 }
@@ -352,7 +364,7 @@ function useCurrentLocation() {
 
       elements.currentLocationButton.disabled = false;
       elements.currentLocationButton.textContent = "使用目前位置";
-      runQuery();
+      runQuery("current");
     },
     (error) => {
       console.error(error);
@@ -366,6 +378,80 @@ function useCurrentLocation() {
       maximumAge: 60000,
     },
   );
+}
+
+function updateSnapshotFreshnessGuide() {
+  const referenceTime = new Date(state.snapshot.examp.reference_time);
+  const ageMinutes = (Date.now() - referenceTime.getTime()) / 60000;
+
+  if (!Number.isFinite(ageMinutes)) {
+    elements.validationDataStatus.textContent = "❌ 無法解析 ExAMP 資料時間";
+    return;
+  }
+
+  if (ageMinutes < -5) {
+    elements.validationDataStatus.textContent = "⚠️ ExAMP 資料時間晚於目前時間";
+  } else if (ageMinutes <= 30) {
+    elements.validationDataStatus.textContent =
+      `✅ 可用：ExAMP 約 ${Math.max(0, ageMinutes).toFixed(0)} 分鐘前`;
+  } else if (ageMinutes < 120) {
+    elements.validationDataStatus.textContent =
+      `⚠️ 偏舊：ExAMP 約 ${ageMinutes.toFixed(0)} 分鐘前`;
+  } else {
+    elements.validationDataStatus.textContent =
+      `❌ 已過期：ExAMP 約 ${ageMinutes.toFixed(0)} 分鐘前；重新載入仍可能是舊快照，代表後端尚未更新`;
+  }
+}
+
+function updateValidationQueryGuide(exampResult, source) {
+  const sourceLabels = {
+    current: "✅ 目前位置",
+    manual: "手動輸入座標",
+    sample: "範例位置",
+    initial: "預設範例位置",
+  };
+  elements.validationQuerySource.textContent = sourceLabels[source] ?? source;
+
+  const referenceTime = new Date(state.snapshot.examp.reference_time);
+  const windowStart = new Date(
+    referenceTime.getTime() + exampResult.startMinute * 60 * 1000,
+  );
+  const windowEnd = new Date(
+    referenceTime.getTime() + exampResult.endMinute * 60 * 1000,
+  );
+
+  elements.validationWindow.textContent =
+    `${formatTime(windowStart)}–${formatTime(windowEnd)}`;
+  elements.validationRainfall.textContent = formatExampRainfall(exampResult.rainfall);
+
+  if (source !== "current") {
+    elements.validationInstruction.textContent =
+      "這次不是用目前位置查詢。定點實測請先按「使用目前位置」。";
+    return;
+  }
+
+  if (exampResult.rainfall === null || exampResult.rainfall === undefined) {
+    elements.validationInstruction.textContent =
+      `請在 ${formatTime(windowStart)}–${formatTime(windowEnd)} 觀察現場；這一筆 ExAMP 無有效值，不拿來判斷有雨或沒雨。`;
+    return;
+  }
+
+  elements.validationInstruction.textContent =
+    `請在 ${formatTime(windowStart)}–${formatTime(windowEnd)} 觀察是否真的有雨正在落下。只有地面濕、但沒看到雨，先記「不確定」。`;
+}
+
+function updateValidationErrorGuide(message, source) {
+  const sourceLabels = {
+    current: "✅ 目前位置",
+    manual: "手動輸入座標",
+    sample: "範例位置",
+    initial: "預設範例位置",
+  };
+  elements.validationQuerySource.textContent = sourceLabels[source] ?? source;
+  elements.validationWindow.textContent = "—";
+  elements.validationRainfall.textContent = "—";
+  elements.validationInstruction.textContent = message;
+  updateSnapshotFreshnessGuide();
 }
 
 function lookupExampCoordinate(coordinate, validAt) {
